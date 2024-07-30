@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Transcription</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="page-container">
+        <div class="container">
+            <h1>Real-time Audio Transcription</h1>
+            <div class="status">
+                Status: <span id="statusText">Not recording</span> <span id="statusIndicator">⚪</span>
+            </div>
+            <div class="button-container">
+                <button id="startButton">Start Transcription</button>
+                <button id="stopButton">Stop Transcription</button>
+                <button id="clearButton">Clear Transcript</button>
+            </div>
+            <div id="transcript"></div>
+            <div class="info-section">
+                <h2>How to use:</h2>
+                <ul>
+                    <li>Click "Start Transcription" to begin recording.</li>
+                    <li>Speak clearly into your microphone.</li>
+                    <li>Watch as your speech is transcribed in real-time.</li>
+                    <li>Click "Stop Transcription" when you're done.</li>
+                    <li>Use "Clear Transcript" to remove all transcribed text.</li>
+                </ul>
+            </div>
+            <div class="footer">
+                <p>© Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved. </p>
+            </div>
+        </div>
+    </div>
+    <script>
+        const socket = io();
+        let audioContext;
+        let audioInput;
+        let processor;
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const clearButton = document.getElementById('clearButton');
+        const statusText = document.getElementById('statusText');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const transcript = document.getElementById('transcript');
+
+        let currentTranscript = '';
+        let lastFinalIndex = 0;
+
+        startButton.addEventListener('click', startRecording);
+        stopButton.addEventListener('click', stopRecording);
+        clearButton.addEventListener('click', clearTranscript);
+
+        function updateStatus(status) {
+            console.log('Status updated:', status);
+            statusText.textContent = status;
+            statusIndicator.textContent = status === 'Recording' ? '🔴' : '⚪';
+        }
+
+        async function startRecording() {
+            console.log('Start button clicked');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('Microphone access granted');
+                audioContext = new AudioContext();
+                audioInput = audioContext.createMediaStreamSource(stream);
+                processor = audioContext.createScriptProcessor(1024, 1, 1);
+                audioInput.connect(processor);
+                processor.connect(audioContext.destination);
+
+                processor.onaudioprocess = (e) => {
+                    const float32Array = e.inputBuffer.getChannelData(0);
+                    const int16Array = new Int16Array(float32Array.length);
+                    for (let i = 0; i < float32Array.length; i++) {
+                        int16Array[i] = Math.max(-32768, Math.min(32767, Math.floor(float32Array[i] * 32768)));
+                    }
+                    console.log('Sending audio chunk to server, size:', int16Array.buffer.byteLength);
+                    socket.emit('audioData', int16Array.buffer);
+                };
+
+                socket.emit('startTranscription');
+                console.log('startTranscription event emitted');
+                updateStatus('Recording');
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                updateStatus('Error: ' + error.message);
+            }
+        }
+
+        function stopRecording() {
+            console.log('Stop button clicked');
+            if (audioContext && audioContext.state !== 'closed') {
+                audioInput.disconnect();
+                processor.disconnect();
+                audioContext.close();
+                socket.emit('stopTranscription');
+                updateStatus('Not recording');
+            }
+        }
+
+        function clearTranscript() {
+            console.log('Clear button clicked');
+            currentTranscript = '';
+            lastFinalIndex = 0;
+            transcript.textContent = '';
+        }
+
+        socket.on('transcription', data => {
+            console.log('Received transcription:', data);
+            if (data.isFinal) {
+                currentTranscript += data.text + ' ';
+                lastFinalIndex = currentTranscript.length;
+            } else {
+                const partialTranscript = currentTranscript + data.text;
+                transcript.textContent = partialTranscript;
+            }
+            transcript.textContent = currentTranscript;
+        });
+
+        socket.on('error', errorMessage => {
+            console.error('Server error:', errorMessage);
+            transcript.textContent += '\nError: ' + errorMessage;
+        });
+
+        console.log('Client-side script loaded');
+    </script>
+</body>
+</html>
