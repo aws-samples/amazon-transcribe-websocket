@@ -11,7 +11,7 @@
   "license": "ISC",
   "description": "Whether you're building a live captioning system, a voice-controlled interface, or a meeting transcription tool, the ability to convert speech to text in real-time can significantly improve your application's functionality. We created a sample static website to showcase how to leverage Amazon Transcribe's WebSocket API to create a real-time transcription service using Node.js",
   "dependencies": {
-    "@aws-sdk/client-transcribe-streaming": "^3.620.1",
+    "@aws-sdk/client-transcribe-streaming": "^3.637.0",
     "aws-sdk": "^2.1664.0",
     "express": "^4.19.2",
     "socket.io": "^4.7.5"
